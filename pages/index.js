@@ -1,175 +1,167 @@
-import Head from "next/head";
-import { useEffect, useState } from "react";
-import {
-  Card,
-  Button,
-  Container,
-  Row,
-  Col,
-  ListGroup,
-  Form,
-} from "react-bootstrap";
-import axios from "axios";
+import { Button, Container, Row, Col } from "react-bootstrap";
 import Link from "next/link";
 import { getCategories, getPeers } from "../api/api";
+import Peers from "../components/peers";
+import SearchInput from "../components/searchInput";
+import FilterColumn from "../components/filterColumn";
+import { useEffect, useState } from "react";
+import Pagination from "../components/pagination";
+import { useMediaQuery } from "react-responsive";
+import Loading from "../components/loading";
 
 export default function Home() {
-  const [peerData, setPeerData] = useState([]);
-  const [peerList, setPeerList] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [searchText, setSearchText] = useState("");
-
-  useEffect(() => {
-    getInitialData();
-    getCategories().then((value) => setCategories(value));
-  }, []);
-
-  function getInitialData() {
-    getPeers().then((value) => {
-      setPeerList(value);
-      setPeerData(value);
+    const [filteredPeerList, setFilteredPeerList] = useState(null);
+    const [peerList, setPeerList] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [selectedCategory, setSelectedCategory] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPageRange, setCurrentPageRange] = useState(9);
+    const [pageRangeList, setPageRangeList] = useState([
+        { id: 9, name: "9/page" },
+        { id: 18, name: "18/page" },
+        { id: 45, name: "45/page" },
+        { id: 90, name: "90/page" },
+    ]);
+    const hiddenTabletOrMobile = useMediaQuery({
+        query: "(min-device-width: 992px)",
     });
-  }
 
-  const filterPeersAsCategory = (category) => {
-    if (category == "clear") getInitialData();
-    else {
-      var newList = peerData.filter((item) => {
-        return item.Category.toLowerCase().includes(category.toLowerCase());
-      });
-      setPeerList(newList);
-    }
-  };
+    const paginate = (pageNumber) => {
+        setCurrentPage(pageNumber);
+    };
 
-  const enterPressed = () => {
-    let code = event.keyCode || event.which;
+    const alterCurrentPageRange = (range) => {
+        setCurrentPageRange(range);
+    };
 
-    if (code === 13 || event.button == 0) {
-      if (searchText) {
-        var newList = peerData.filter((item) => {
-          return (
-            item.Description.toLowerCase().includes(searchText.toLowerCase()) ||
-            item.Name.toLowerCase().includes(searchText.toLowerCase())
-          );
+    const selectedPageRange = (range) => {
+        return pageRangeList.filter((list) => list.id == range)[0];
+    };
+
+    useEffect(() => {
+        setLoading(true);
+        Promise.all([getCategories(), getPeers()]).then((results) => {
+            setCategories(results[0]);
+            setPeerList(results[1]);
+            pageRangeList.push({ id: results[1].length, name: "All" });
+            setLoading(false);
         });
-        setPeerList(newList);
-      } else {
-        getInitialData();
-      }
-    }
-  };
+    }, []);
 
-  return (
-    <>
-      <Container>
-        <br />
+    const filterPeersAsCategory = (category) => {
+        if (category == "clear") setFilteredPeerList(null);
+        else {
+            const newList = peerList.filter((item) => {
+                return item.Category.toLowerCase().includes(category.toLowerCase());
+            });
+            setFilteredPeerList(newList);
+            setCurrentPage(1);
+        }
+    };
 
-        <h3>Find Your Peer</h3>
-        <br />
-        <Row>
-          <Col xs={7}>
-            <Form.Control
-              type="text"
-              placeholder="Search with Name or Description"
-              onChange={(e) => setSearchText(e.target.value)}
-              onKeyPress={enterPressed.bind(this)}
-            />
-          </Col>
-          <Col xs={1}>
-            <Button variant="primary" onClick={enterPressed.bind(this)}>
-              Search
-            </Button>
-          </Col>
-        </Row>
-        <br />
-        <Row>
-          <Col sm={12} md={3} style={{ marginBottom: "1rem" }}>
-            <ListGroup>
-              <ListGroup.Item
-                action
-                onClick={(e) => {
-                  filterPeersAsCategory("clear");
-                }}
-              >
-                Clear Filter
-              </ListGroup.Item>
-              <Link href={"add"}>
-                <ListGroup.Item action>Add new Peer</ListGroup.Item>
-              </Link>
-            </ListGroup>
-            <br></br>
-            <ListGroup>
-              {categories
-                ? categories.map((category, k) => {
-                    return (
-                      <ListGroup.Item
-                        key={k}
-                        action
-                        onClick={(e) => {
-                          filterPeersAsCategory(category.Name);
-                        }}
-                      >
-                        {category.Name}
-                      </ListGroup.Item>
-                    );
-                  })
-                : ""}
-            </ListGroup>
-          </Col>
-          <Col sm={12} md={9} style={{ display: "flex", flexDirection: "row" }}>
-            <Col>
-              <Row>
-                {peerList
-                  ? peerList.map((peer, i) => {
-                      return (
+    const handleChange = (e) => {
+        const { value } = e.target;
+        if (value) {
+            setSelectedCategory("");
+            const newList = peerList.filter((item) => {
+                return (
+                    item.Category.toLocaleLowerCase().includes(
+                        value.toLocaleLowerCase()
+                    ) ||
+                    item.Description.toLocaleLowerCase().includes(
+                        value.toLocaleLowerCase()
+                    ) ||
+                    item.Name.toLocaleLowerCase().includes(value.toLocaleLowerCase())
+                );
+            });
+            setFilteredPeerList(newList);
+            setCurrentPage(1);
+        } else {
+            setFilteredPeerList(null);
+        }
+    };
+
+    const getList = () => {
+        if (filteredPeerList) {
+            return filteredPeerList;
+        }
+
+        return peerList;
+    };
+
+    const getPeerList = (list) => {
+        const pageSize = selectedPageRange(currentPageRange).id;
+        const indexOfLastPost = currentPage * pageSize;
+        const indexOfFirstPost = indexOfLastPost - pageSize;
+
+        if (!hiddenTabletOrMobile || indexOfFirstPost == indexOfLastPost) {
+            return list;
+        }
+        return list.slice(indexOfFirstPost, indexOfLastPost);
+    };
+
+    const getPageItemList = () => {
+        const items = [];
+        for (
+            let i = 1;
+            i <= Math.ceil(getList().length / selectedPageRange(currentPageRange).id);
+            i++
+        ) {
+            items.push(i);
+        }
+        return items;
+    };
+
+    return (
+        <>
+            <Container>
+                <>
+                    <Row>
+                        <FilterColumn
+                            categories={categories}
+                            filterPeersAsCategory={filterPeersAsCategory}
+                            setSelectedCategory={setSelectedCategory}
+                            selectedCategory={selectedCategory}
+                        />
                         <Col
-                          xs={12}
-                          s={6}
-                          md={6}
-                          lg={4}
-                          key={i}
-                          style={{ marginBottom: "1rem" }}
+                            sm={12}
+                            md={9}
+                            style={{ display: "flex", flexDirection: "row" }}
                         >
-                          <Card
-                            style={{
-                              maxHeight: "50rem",
-                              textAlign: "center",
-                            }}
-                            key={i}
-                          >
-                            <Card.Img
-                              variant="top"
-                              src={peer.ImgUrl}
-                              style={{
-                                width: "13rem",
-                                maxHeight: "50rem",
-                                margin: "1rem auto 1rem auto",
-                              }}
-                            />
-                            <Card.Body>
-                              <Card.Title>{peer.Name}</Card.Title>
-                              <Card.Text>
-                                {peer.Description} <br />
-                                <b>{peer.Category}</b>
-                              </Card.Text>
-                              <Button
-                                variant="primary"
-                                target="_blank"
-                                href={peer.Superpeer}
-                              >
-                                Let's Talk
-                              </Button>
-                            </Card.Body>
-                          </Card>
+                            <Col className={"right-column"}>
+                                <Row style={{ justifyContent: "flex-end", padding: "0 15px" }}>
+                                    <Link href={"request"}>
+                                        <Button variant="primary" style={{ marginRight: "5px" }}>
+                                            Send Request
+                                        </Button>
+                                    </Link>
+                                    <Link href={"add"}>
+                                        <Button variant="success">Add new Peer</Button>
+                                    </Link>
+                                </Row>
+
+                                <SearchInput handleChange={handleChange} />
+                                <Pagination
+                                    pageRangeList={pageRangeList}
+                                    selectedPageRange={selectedPageRange(currentPageRange)}
+                                    alterCurrentPageRange={alterCurrentPageRange}
+                                    pageItemList={getPageItemList()}
+                                    paginate={paginate}
+                                    currentPage={currentPage}
+                                />
+                                {loading ? (
+                                    <Row style={{ justifyContent: "center", marginTop: "40px" }}>
+                                        <Loading style={{ marginTop: "40px" }} />
+                                    </Row>
+                                ) : (
+                                    <Peers peers={getPeerList(getList())} />
+                                )}
+                            </Col>
                         </Col>
-                      );
-                    })
-                  : ""}
-              </Row>
-            </Col>
-          </Col>
-        </Row>
-      </Container>
-    </>
-  );
+                    </Row>
+                </>
+            </Container>
+        </>
+    );
 }
